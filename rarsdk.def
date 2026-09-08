@@ -1,0 +1,38 @@
+LIBRARY rarsdk
+EXPORTS
+  ; extraction (UnRAR engine passthrough)
+  rarsdk_GetDllVersion
+  rarsdk_OpenArchiveEx
+  rarsdk_CloseArchive
+  rarsdk_ReadHeaderEx
+  rarsdk_ProcessFile
+  rarsdk_ProcessFileW
+  rarsdk_SetCallback
+  rarsdk_SetPassword
+  rarsdk_SetPasswordW
+  rarsdk_TestArchive
+  rarsdk_ExtractArchive
+  rarsdk_IsArchive
+  rarsdk_RecoverArchive
+  ; creation (RAR5 writer)
+  rarsdk_CreateOpen
+  rarsdk_CreateAddFile
+  rarsdk_CreateAddData
+  rarsdk_CreateAddDir
+  rarsdk_CreateClose
+  rarsdk_PackFileToArchive
+  rarsdk_PackDataToArchive
+  ; primitives
+  rarsdk_PutVint
+  rarsdk_GetVint
+  rarsdk_CRC32
+  rarsdk_Blake2sp
+  rarsdk_Blake2spFile
+  rarsdk_Rar5KDF
+  rarsdk_Rar3KDF
+  rarsdk_AESInit
+  rarsdk_AESProcess
+  rarsdk_AESFree
+  rarsdk_RS16Init
+  rarsdk_RS16UpdateECC
+  rarsdk_RS16Free
