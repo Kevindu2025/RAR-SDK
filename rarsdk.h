@@ -220,11 +220,145 @@ RARAPI RARSDK_RS16* RARCALL rarsdk_RS16Init(unsigned dataCount,
      for (r=0; r<recCount; r++)
        RS16UpdateECC(rs, d, r, dataBlock_d, ecc_r, blockSize);  */
 RARAPI void   RARCALL rarsdk_RS16UpdateECC(RARSDK_RS16 *rs,
-                                           unsigned dataNum, unsigned eccNum,
-                                           const unsigned char *data,
-                                           unsigned char *ecc,
-                                           size_t blockSize);
+                                            unsigned dataNum, unsigned eccNum,
+                                            const unsigned char *data,
+                                            unsigned char *ecc,
+                                            size_t blockSize);
 RARAPI void   RARCALL rarsdk_RS16Free(RARSDK_RS16 *rs);
+
+/* ===================================================================== */
+/*  Part 4: Reusable compression / crypto primitives                      */
+/*         (merged from learnarc; public-domain teaching implementations) */
+/* ===================================================================== */
+
+/* These are independent from the RAR5-specific rarsdk_AESInit / rarsdk_Rar5KDF
+ * APIs above. They expose the underlying learnarc primitives for any caller
+ * who wants fine-grained control (LZ77+Huffman, PPM, SHA-256, AES-CBC,
+ * LArc container). Implementation files: la_sha256.cpp / la_aes.cpp /
+ * la_lzh.cpp / la_ppm.cpp / la_larc.cpp. Headers available to C++ users at
+ * include/learnarc/*.hpp. */
+
+/* --- SHA-256 (incremental + one-shot) --- */
+/* Opaque context type - sizeof = underlying Sha256Ctx. Allocate on stack
+ * or heap; never inspect fields. */
+typedef struct rarsdk_la_sha256_ctx {
+    unsigned char _opaque[112];     /* sizeof(learnarc::Sha256Ctx) on x64 */
+} rarsdk_la_sha256_ctx;
+
+RARAPI void   RARCALL rarsdk_LaSha256Init(rarsdk_la_sha256_ctx *ctx);
+RARAPI void   RARCALL rarsdk_LaSha256Update(rarsdk_la_sha256_ctx *ctx,
+                                            const void *data, size_t n);
+RARAPI void   RARCALL rarsdk_LaSha256Final(rarsdk_la_sha256_ctx *ctx,
+                                           unsigned char out[32]);
+RARAPI void   RARCALL rarsdk_LaSha256(const void *data, size_t n,
+                                       unsigned char out[32]);
+
+/* --- HMAC-SHA-256 (RFC 2104) --- */
+RARAPI void   RARCALL rarsdk_LaHmacSha256(const void *key, size_t keyLen,
+                                          const void *data, size_t dataLen,
+                                          unsigned char out[32]);
+
+/* --- PBKDF2-HMAC-SHA-256 (RFC 2898) ---
+ * iterations: count (>=1); outLen: <=4GB. */
+RARAPI int    RARCALL rarsdk_LaPbkdf2HmacSha256(const char *password,
+                                                 const unsigned char *salt, size_t saltLen,
+                                                 unsigned int iterations,
+                                                 unsigned char *out, size_t outLen);
+
+/* --- AES-128/192/256 block + CBC (teaching implementation, FIPS-197) ---
+ * Separate from the RAR5-specific rarsdk_AESInit/Process above. Use this
+ * if you want plain block-level access or generic CBC chaining with
+ * application-managed padding. */
+typedef void * rarsdk_la_aes;        /* opaque AesKey* */
+RARAPI rarsdk_la_aes RARCALL rarsdk_LaAesInit(const void *key, unsigned int keyBits);
+RARAPI void   RARCALL rarsdk_LaAesEncryptBlock(rarsdk_la_aes ctx,
+                                                const void *in16, void *out16);
+RARAPI void   RARCALL rarsdk_LaAesDecryptBlock(rarsdk_la_aes ctx,
+                                                const void *in16, void *out16);
+/* bytes must be a multiple of 16. */
+RARAPI void   RARCALL rarsdk_LaAesCbcEncrypt(rarsdk_la_aes ctx, const void *iv16,
+                                              const void *in, void *out, size_t bytes);
+RARAPI void   RARCALL rarsdk_LaAesCbcDecrypt(rarsdk_la_aes ctx, const void *iv16,
+                                              const void *in, void *out, size_t bytes);
+RARAPI void   RARCALL rarsdk_LaAesFree(rarsdk_la_aes ctx);
+
+/* --- LZ77 + canonical Huffman (RLE/LZ family: "lzh" / "-m1..-m4" idea) ---
+ * Encode: returns compressed byte count on success, RARSDK_E_UNSUPPORTED
+ *         if no gain (caller should fall back to store), RARSDK_E_* otherwise.
+ * Decode: returns decoded byte count (== originalLen) on success.
+ * windowSize: 64KB..4MB recommended; maxChain: 4..256 typical. */
+RARAPI int    RARCALL rarsdk_LaLzhEncode(const void *data, size_t n,
+                                          unsigned int windowSize, unsigned int maxChain,
+                                          void *out, size_t outCap);
+RARAPI int    RARCALL rarsdk_LaLzhDecode(const void *in, size_t inSize,
+                                          size_t originalLen,
+                                          void *out, size_t outCap);
+
+/* --- PPM (Prediction by Partial Matching) + range coder ("-m5" idea) ---
+ * order: 1..16 typical. */
+RARAPI int    RARCALL rarsdk_LaPpmCompress(const void *data, size_t n,
+                                            unsigned int order,
+                                            void *out, size_t outCap);
+RARAPI int    RARCALL rarsdk_LaPpmDecompress(const void *in, size_t inSize,
+                                              size_t originalLen, unsigned int order,
+                                              void *out, size_t outCap);
+
+/* ===================================================================== */
+/*  Part 5: LArc container format (LA v1, from learnarc)                 */
+/* ===================================================================== */
+/*
+ * LArc is a self-contained teaching-grade archive format with per-entry
+ * CRC32 header, store/lzh/ppm methods, and optional RAR5-style AES-256
+ * encryption. Open in a hex editor - see include/learnarc/container.hpp
+ * for the full spec.
+ *
+ * Method values for the LArcWriter* APIs:
+ *   0 = store (no compression)
+ *   1 = LZ77 + canonical Huffman
+ *   2 = PPM + range coder
+ *
+ * Compression methods are NOT intercompatible with WinRAR / RAR format.
+ */
+
+typedef struct rarsdk_larc_writer rarsdk_larc_writer;
+typedef struct rarsdk_larc_reader rarsdk_larc_reader;
+
+RARAPI rarsdk_larc_writer * RARCALL rarsdk_LArcWriterCreate(void);
+RARAPI int   RARCALL rarsdk_LArcWriterAddFile(rarsdk_larc_writer *w,
+                                                const wchar_t *srcPath,
+                                                const char *arcName,
+                                                unsigned int method,
+                                                unsigned int kdfLg2,
+                                                const char *password,
+                                                int encrypt);
+RARAPI int   RARCALL rarsdk_LArcWriterAddData(rarsdk_larc_writer *w,
+                                                const char *arcName,
+                                                const void *data, size_t size,
+                                                unsigned int method,
+                                                unsigned int kdfLg2,
+                                                const char *password,
+                                                int encrypt);
+RARAPI int   RARCALL rarsdk_LArcWriterAddDir(rarsdk_larc_writer *w,
+                                               const char *dirName);
+RARAPI int   RARCALL rarsdk_LArcWriterSave(rarsdk_larc_writer *w,
+                                             const wchar_t *path);
+RARAPI void  RARCALL rarsdk_LArcWriterFree(rarsdk_larc_writer *w);
+
+RARAPI rarsdk_larc_reader * RARCALL rarsdk_LArcReaderOpen(const wchar_t *path);
+RARAPI void  RARCALL rarsdk_LArcReaderClose(rarsdk_larc_reader *r);
+
+typedef int (RARCALL *rarsdk_LArcEntryCallback)(void *user,
+                                                  const char *name,
+                                                  unsigned int method,
+                                                  int encrypted,
+                                                  unsigned long long origLen,
+                                                  unsigned long long compLen);
+RARAPI int   RARCALL rarsdk_LArcReaderList(rarsdk_larc_reader *r,
+                                             rarsdk_LArcEntryCallback cb,
+                                             void *user);
+RARAPI int   RARCALL rarsdk_LArcReaderExtractAll(rarsdk_larc_reader *r,
+                                                   const wchar_t *outDir,
+                                                   const char *password);
 
 #ifdef __cplusplus
 }

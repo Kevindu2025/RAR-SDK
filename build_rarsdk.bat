@@ -12,7 +12,7 @@ call "%VC%" x64 >nul 2>&1
 if errorlevel 1 (echo FAILED: VS env & exit /b 1)
 
 set DEFS=/DRARSDK_BUILD /DRARDLL /DUNRAR /DSILENT /D_FILE_OFFSET_BITS=64 /D_LARGEFILE_SOURCE /D_CRT_SECURE_NO_WARNINGS /DNOMINMAX
-set OPTS=/nologo /O2 /W3 /EHsc /c %DEFS%
+set OPTS=/nologo /O2 /W3 /EHsc /std:c++17 /utf-8 /c %DEFS%
 
 rem ---- 1) UnRAR objects ----
 cd /d %SDK%\unrar
@@ -34,6 +34,14 @@ for %%F in (rs_writer rs_aes rs_rs16 rs_create rs_bridge rs_extra rs_blake) do (
     if not exist %OBJ%\%%F.obj (echo [WRITER] compile FAILED: %%F & set /a FAILED+=1)
   )
 )
+rem ---- 2b) learnarc primitive wrappers ----
+set LA_INC=/I%SDK%\include
+for %%F in (la_sha256 la_aes la_lzh la_ppm la_larc) do (
+  if not exist %OBJ%\%%F.obj (
+    cl %OPTS% %LA_INC% /Fo%OBJ%\%%F.obj %%F.cpp >nul 2>&1
+    if not exist %OBJ%\%%F.obj (echo [LEARNARC] compile FAILED: %%F & set /a FAILED+=1)
+  )
+)
 if %FAILED% GTR 0 goto :showerr
 
 rem ---- 3) link ----
@@ -48,6 +56,7 @@ link /nologo /DLL /OUT:%OUT%\rarsdk.dll /DEF:%SDK%\rarsdk.def ^
   %OBJ%\list.obj %OBJ%\find.obj %OBJ%\unpack.obj %OBJ%\headers.obj %OBJ%\threadpool.obj ^
   %OBJ%\rs16.obj %OBJ%\cmddata.obj %OBJ%\ui.obj %OBJ%\dll.obj %OBJ%\qopen.obj ^
   %OBJ%\rs_writer.obj %OBJ%\rs_aes.obj %OBJ%\rs_rs16.obj %OBJ%\rs_create.obj %OBJ%\rs_bridge.obj %OBJ%\rs_extra.obj %OBJ%\rs_blake.obj %OBJ%\filestr.obj %OBJ%\scantree.obj %OBJ%\isnt.obj ^
+  %OBJ%\la_sha256.obj %OBJ%\la_aes.obj %OBJ%\la_lzh.obj %OBJ%\la_ppm.obj %OBJ%\la_larc.obj ^
   /MACHINE:X64 advapi32.lib user32.lib shell32.lib ole32.lib
 if exist %OUT%\rarsdk.dll (echo OK: %OUT%\rarsdk.dll) else (echo LINK FAILED)
 exit /b 0

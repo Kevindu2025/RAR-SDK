@@ -36,3 +36,34 @@ EXPORTS
   rarsdk_RS16Init
   rarsdk_RS16UpdateECC
   rarsdk_RS16Free
+  ; SHA-256 / HMAC / PBKDF2 (from learnarc)
+  rarsdk_LaSha256
+  rarsdk_LaSha256Init
+  rarsdk_LaSha256Update
+  rarsdk_LaSha256Final
+  rarsdk_LaHmacSha256
+  rarsdk_LaPbkdf2HmacSha256
+  ; AES block + CBC (from learnarc)
+  rarsdk_LaAesInit
+  rarsdk_LaAesEncryptBlock
+  rarsdk_LaAesDecryptBlock
+  rarsdk_LaAesCbcEncrypt
+  rarsdk_LaAesCbcDecrypt
+  rarsdk_LaAesFree
+  ; LZ77 + Huffman (from learnarc)
+  rarsdk_LaLzhEncode
+  rarsdk_LaLzhDecode
+  ; PPM + range coder (from learnarc)
+  rarsdk_LaPpmCompress
+  rarsdk_LaPpmDecompress
+  ; LArc container format (from learnarc)
+  rarsdk_LArcWriterCreate
+  rarsdk_LArcWriterAddFile
+  rarsdk_LArcWriterAddData
+  rarsdk_LArcWriterAddDir
+  rarsdk_LArcWriterSave
+  rarsdk_LArcWriterFree
+  rarsdk_LArcReaderOpen
+  rarsdk_LArcReaderClose
+  rarsdk_LArcReaderList
+  rarsdk_LArcReaderExtractAll
